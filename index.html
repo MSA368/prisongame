@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="fi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kiven sisässä - Vankilapako</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            font-family: 'Courier New', Courier, monospace;
+        }
+        body {
+            background-color: #1a1a1a;
+            color: #e0e0e0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px;
+        }
+        #game-container {
+            background-color: #262626;
+            width: 100%;
+            max-width: 700px;
+            border: 3px solid #404040;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+        }
+        h1 {
+            text-align: center;
+            color: #ff4444;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            margin-top: 0;
+            border-bottom: 2px solid #404040;
+            padding-bottom: 10px;
+        }
+        #stats-panel {
+            display: flex;
+            justify-content: space-between;
+            background-color: #333;
+            padding: 10px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+            font-size: 14px;
+        }
+        #hp-bar {
+            color: #ff4444;
+            font-weight: bold;
+        }
+        #inventory {
+            color: #ffbb00;
+        }
+        #text-area {
+            font-size: 16px;
+            line-height: 1.6;
+            margin-bottom: 25px;
+            min-height: 150px;
+            white-space: pre-line;
+        }
+        #choices-area {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        button {
+            background-color: #383838;
+            color: #fff;
+            border: 1px solid #555;
+            padding: 12px;
+            font-size: 15px;
+            border-radius: 4px;
+            cursor: pointer;
+            text-align: left;
+            transition: all 0.2s ease;
+        }
+        button:hover {
+            background-color: #4a4a4a;
+            border-color: #ff4444;
+        }
+        button:active {
+            background-color: #222;
+        }
+    </style>
+</head>
+<body>
+
+<div id="game-container">
+    <h1>Kiven Sisässä</h1>
+    
+    <div id="stats-panel">
+        <div>Elämäpisteet: <span id="hp-bar">100</span> HP</div>
+        <div>Tavarat: <span id="inventory">Tyhjä</span></div>
+    </div>
+
+    <div id="text-area">Peli ladataan...</div>
+    <div id="choices-area"></div>
+</div>
+
+<script>
+    // Pelin tila
+    let gameState = {
+        hp: 100,
+        inventory: [],
+        visited: {}
+    };
+
+    // Peliskenaariot
+    const story = {
+        alku: {
+            text: "Istut synkässä Turun vankilan sellissä. Tuomiosi on elinkautinen rikoksesta, jota et (omasta mielestäsi) tehnyt. Seinät murenevat ja käytävältä kuuluu vartijan raskaat askeleet. \n\nTänään on pakoiltasi. Olet huomannut, että sellisi nurkassa oleva tiili on löysällä, ja sängyn alla on vanha ruosteinen lusikka.",
+            choices: [
+                { text: "Käytä lusikkaa ja irrota tiili seinästä", target: "tiili_irti" },
+                { text: "Odota iltatarkastusta ja yritä yllättää vartija", target: "vartijan_yllätys" },
+                { text: "Huuda vartijaa ja valita huonosta olosta", target: "teeskentele_sairasta" }
+            ]
+        },
+        tiili_irti: {
+            text: "Koverrat tiilen irti hiljaa. Sen takaa paljastuu pimeä, pölyinen ilmanvaihtokanava. Kanavasta vetää kylmää ilmaa. \n\nKuulet vartijan askeleiden lähestyvän oveasi. Sinulla on vähän aikaa.",
+            choices: [
+                { text: "Ryömi ilmanvaihtokanavaan heti", target: "kanava" },
+                { text: "Laita tiili takaisin ja mene nukkumaan", target: "yö_sellissä" }
+            ]
+        },
+        vartijan_yllätys: {
+            text: "Piiloudut oven taakse. Vartija avaa oven tarkastusta varten. Astut esiin ja yrität taltuttaa hänet paljain käsin!\n\n Vartija on kuitenkin kokenut karpaasi. Hän väistää ja lyö sinua pampulla olkapäähän. Menetät 30 HP, mutta onnistut tönäisemään hänet selliin ja lukitsemaan oven!",
+            action: () => { 
+                gameState.hp -= 30; 
+                gameState.inventory.push("Vartijan avaimet");
+            },
+            choices: [
+                { text: "Juokse äkkiä käytävälle (Sinulla on nyt Vartijan avaimet)", target: "kaytava_avaimilla" }
+            ]
+        },
+        teeskentele_sairasta: {
+            text: "Heittäydyt lattialle ja alat korista. Vartija katsoo sisään kurkistusluukusta, naurahtaa ja sanoo: 'Lääkäri tulee vasta maanantaina, koita kestää.' \n\nTämä plääni epäonnistui ja hävitit aikaa. Lusikkasi on kuitenkin vielä tallella.",
+            choices: [
+                { text: "Yritä sittenkin irrottaa tiili seinästä", target: "tiili_irti" }
+            ]
+        },
+        yö_sellissä: {
+            text: "Laitat tiilen paikoilleen ja teeskentelet nukkuvaa. Vartija katsoo sisään ja jatkaa matkaa. \n\nAamulla sinut siirretään yllättäen toiseen vankilaan tiukempien turvatoimien taakse. Pakoepäonnistui.\n\n GAME OVER.",
+            choices: [{ text: "Yritä uudelleen", target: "alku", reset: true }]
+        },
+        kanava: {
+            text: "Ryömit ahtaassa ja likaisessa kanavassa. Saavut risteykseen. Vasemmalta kuuluu hurinaa (luultavasti iso tuuletin), oikealta puolelta haisee viemäri.",
+            choices: [
+                { text: "Mene vasemmalle kohti hurinaa", target: "tuuletin" },
+                { text: "Mene oikealle kohti viemäriä", target: "viemari" }
+            ]
+        },
+        tuuletin: {
+            text: "Saavut valtavan metallisen tuulettimen luo. Lapakset pyörivät kovaa vauhtia. Huomaat maassa paksun rautatangan.",
+            choices: [
+                { text: "Ota rautatanko ja yritä jumittaa tuuletin", target: "tuuletin_jumissa" },
+                { text: "Käänny takaisin viemärisuuntaan", target: "viemari" }
+            ]
+        },
+        tuuletin_jumissa: {
+            text: "Työnnät rautatangan tuulettimen väliin. Kuuluu hirveä pamaus ja kipinäsade! Yksi lavoista murtuu ja lentää sääreesi. Menetät 20 HP.\n\nTuuletin pysähtyy ja reitti sen läpi on auki. Reitti johtaa vankilan katolle.",
+            action: () => { gameState.hp -= 20; },
+            choices: [
+                { text: "Kiipeä rikkoutuneen tuulettimen läpi katolle", target: "katto" }
+            ]
+        },
+        viemari: {
+            text: "Putoat polviasamyöten vankilan jätevesialtaaseen. Haju on kuvottava. Löydät mudasta vanhan, mutta toimivan taskulampun.\n\nEteenpäin vie kaksi putkea: kapea huoltoputki tai leveä poistoputki.",
+            action: () => { if(!gameState.inventory.includes("Taskulamppu")) gameState.inventory.push("Taskulamppu"); },
+            choices: [
+                { text: "Ryömi kapeaan huoltoputkeen", target: "huoltoputki" },
+                { text: "Seuraa leveää poistoputkea", target: "poistoputki" }
+            ]
+        },
+        kaytava_avaimilla: {
+            text: "Olet käytävällä vartijan vaatteissa ja avaimet kädessäsi. Valvontakamera kääntyy kohti sinua. Jos juokset, herätät huomiota. Oikealla on pesula ja vasemmalla pääportti.",
+            choices: [
+                { text: "Kävele rauhallisesti vasemmalle kohti pääporttia", target: "paaportti" },
+                { text: "Suuntaa oikealle pesulaan piiloon", target: "pesula" }
+            ]
+        },
+        huoltoputki: {
+            text: "Huoltoputki nousee ylöspäin. Lopulta saavut sähkökaapille, joka on lukittu ruuveilla. Ilman työkaluja et pääse tästä läpi.",
+            choices: [
+                { text: "Palaa takaisin jätevesialtaalle", target: "viemari" }
+            ]
+        },
+        poistoputki: {
+            text: "Poistoputki johdattaa sinut vankilan ulkomuurin ulkopuolelle laskuojaan! Olet vapaa, mutta vaatteesi haisevat kauhealta ja poliisikoirat saavat jälkesi nopeasti, ellet keksi jotain.",
+            choices: [
+                { text: "Juokse kohti läheistä metsää", target: "metsa_loppu" },
+                { text: "Hypppää jokeen peittääksesi hajusi", target: "joki_loppu" }
+            ]
+        },
+        pesula: {
+            text: "Pesulassa on hiljaista. Löydät sieltä puhtaat siviilivaatteet. Vaihdat ne yllesi. Löydät myös unohtuneen sorkkaraudan!",
+            action: () => { if(!gameState.inventory.includes("Sorkkarauta")) gameState.inventory.push("Sorkkarauta"); },
+            choices: [
+                { text: "Mene siviilivaatteissa pääportille", target: "paaportti_siviili" },
+                { text: "Palaa käytävään sorkkaraudan kanssa", target: "kaytava_sorkkarauta" }
+            ]
+        },
+        paaportti: {
+            text: "Pääportilla toinen vartija huomaa veriläiskän varastamassasi univormussa. 'Hei sinä! Pysähdy!' hän huutaa ja vetää etälamauttimen esiin. Jäit kiinni.\n\n GAME OVER.",
+            choices: [{ text: "Yritä uudelleen", target: "alku", reset: true }]
+        },
+        paaportti_siviili: {
+            text: "Siviilivaatteissa kävelet portille muiden vierailijoiden joukossa. Vartija pyytää henkilökorttia. Sinulla ei ole sellaista.",
+            choices: [
+                { text: "Juokse portista läpi väkisin", target: "portti_juoksu" },
+                { text: "Sano unohtaneesi sen autoon ja peräänny", target: "peraanny_portilta" }
+            ]
+        },
+        portti_juoksu: {
+            text: "Juokset portin läpi! Hälytykset soivat. Vankilan portit sulkeutuvat automaattisesti ja jäät puristuksiin väliin. \n\n GAME OVER.",
+            choices: [{ text: "Yritä uudelleen", target: "alku", reset: true }]
+        },
+        peraanny_portilta: {
