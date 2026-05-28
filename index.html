@@ -2,251 +2,195 @@
 <html lang="fi">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Pako Vankilasta - Selviytymispeli</title>
+    <title>Pako Vankilasta</title>
     <style>
-        body {
-            background-color: #1a1a1a;
-            color: #e0e0e0;
-            font-family: 'Courier New', Courier, monospace;
-            padding: 20px;
-            display: flex;
-            justify-content: center;
-        }
-        #game-container {
-            max-width: 800px;
-            width: 100%;
-            background-color: #2d2d2d;
-            padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 0 15px rgba(0,0,0,0.5);
-        }
-        h1 {
-            color: #ff4444;
-            text-align: center;
-            border-bottom: 2px solid #ff4444;
-            padding-bottom: 10px;
-        }
-        #status-bar {
-            display: flex;
-            justify-content: space-between;
-            background-color: #1f1f1f;
-            padding: 10px;
-            margin-bottom: 20px;
-            border-radius: 4px;
-            font-size: 0.9em;
-        }
-        #story-text {
-            min-height: 150px;
-            line-height: 1.6;
-            margin-bottom: 20px;
-            font-size: 1.1em;
-        }
-        #choices {
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-        }
-        button {
-            background-color: #444;
-            color: #fff;
-            border: 1px solid #666;
-            padding: 12px;
-            font-size: 1em;
-            cursor: pointer;
-            border-radius: 4px;
-            text-align: left;
-            transition: background 0.2s;
-        }
-        button:hover {
-            background-color: #555;
-            border-color: #ff4444;
-        }
-        .item-list {
-            color: #ffbb00;
-        }
+        body { background-color: #222; color: #fff; font-family: sans-serif; padding: 20px; text-align: center; }
+        #box { max-width: 600px; margin: 0 auto; background: #333; padding: 20px; border-radius: 10px; border: 2px solid #ff4444; }
+        .stats { background: #111; padding: 10px; margin-bottom: 20px; display: flex; justify-content: space-around; }
+        button { display: block; width: 100%; padding: 12px; margin: 10px 0; background: #555; color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 16px; }
+        button:hover { background: #ff4444; }
     </style>
 </head>
 <body>
 
-<div id="game-container">
+<div id="box">
     <h1>PAKO VANKILASTA</h1>
-    
-    <div id="status-bar">
-        <div>Sijainti: <span id="location">Selliosasto</span></div>
-        <div>Tavarat: <span id="inventory" class="item-list">Tyhjä</span></div>
+    <div class="stats">
+        <div>Sijainti: <span id="loc">Selli</span></div>
+        <div>Tavarat: <span id="inv">Ei mitään</span></div>
     </div>
-
-    <div id="story-text">Peli latautuu...</div>
-    <div id="choices"></div>
+    <p id="teksti">Ladataan peliä...</p>
+    <div id="napit"></div>
 </div>
 
 <script>
-// Pelitilanne (State)
-let state = {
-    inventory: [],
-    guardDistracted: false,
-    ventOpen: false,
-    keycardStolen: false,
-    digProgress: 0,
-    wallWeakened: false,
-    money: 0
-};
+// Pelitilanne
+let reppu = [];
+let kaivettu = 0;
+let vartijaHamatty = false;
+let ilmastointiAuki = false;
 
-// Peliskenariot ja huoneet
-const rooms = {
-    selli: {
-        title: "Oma Selli",
-        text: "Istut pimeässä sellissäsi. Seinät ovat murenevaa betonia. Nurkassa on vanha sänky ja ruosteinen WC-pönttö. Käytävältä kuuluu vartijan askelia.",
-        choices: [
-            { text: "Tutki sängyn alusta", action: () => {
-                if (!state.inventory.includes("Ruuvimeisseli")) {
-                    addItem("Ruuvimeisseli");
-                    return "Löysit sängyn alta vanhan, ruosteisen ruuvimeisselin!";
-                }
-                return "Sängyn alla on vain pölyä.";
-            }},
-            { text: "Tutki takaseinän betonia", action: () => {
-                if (state.inventory.includes("Ruuvimeisseli")) {
-                    state.digProgress += 25;
-                    if (state.digProgress >= 100) {
-                        state.wallWeakened = true;
-                        return "Sait koverrettua seinään suuren reiän! Reikä johtaa huoltokäytävään.";
-                    }
-                    return `Raaputat seinää ruuvimeisselillä. Tiili murenee hieman. (Edistyminen: ${state.digProgress}%)`;
-                }
-                return "Seinä on liian kova paljain käsin murrettavaksi. Tarvitset työkalun.";
-            }},
-            { text: "Mene seinäreiän läpi huoltokäytävään", condition: () => state.wallWeakened, move: "huoltokaytava" },
-            { text: "Astu ulos käytävälle (ovet ovat auki vapaatunnilla)", move: "kaytava" }
-        ]
-    },
-    kaytava: {
-        title: "Vankilan Pääkäytävä",
-        text: "Pitkä, kolkko käytävä. Pohjoisessa näkyy ulko-ovi ja vartijoiden koppi. Etelässä on ulkoilupiha. Lännessä on ruokala.",
-        choices: [
-            { text: "Mene Ruokalaan", move: "ruokala" },
-            { text: "Mene Ulkoilupihalle", move: "piha" },
-            { text: "Yritä juosta suoraan ulko-ovesta ulos", action: () => {
-                if (state.guardDistracted && state.inventory.includes("Avainkortti")) {
-                    moveRoom("vapaus");
-                    return "Vartija on kiireinen ja sinulla on kortti! Juokset ovesta ulos!";
-                } else if (state.inventory.includes("Avainkortti")) {
-                    return "Vartija kopissa näkee sinut heti kun lähestyt ovea ja käskee sinut takaisin. Tarvitset hämäyksen.";
-                }
-                return "Ovi on sähköisessä lukossa. Tarvitset avainkortin ja tavan ohittaa vartija.";
-            }},
-            { text: "Palaa omaan selliin", move: "selli" }
-        ]
-    },
-    ruokala: {
-        title: "Vankilan Ruokala",
-        text: "Ruokala on täynnä melua. Nurkassa on keittiö. Huomaat pöydällä hylätyn tarjottimen ja maassa jotain kiiltävää.",
-        choices: [
-            { text: "Poimi maassa oleva kolikko", action: () => {
-                if (state.money === 0) {
-                    state.money = 5;
-                    addItem("5 Kolikkoa");
-                    return "Löysit 5 kolikkoa maasta.";
-                }
-                return "Maassa ei ole enää mitään.";
-            }},
-            { text: "Juttele keittiöläiselle", action: () => {
-                if (state.money >= 5 && !state.inventory.includes("Sytytin")) {
-                    state.inventory = state.inventory.filter(i => i !== "5 Kolikkoa");
-                    addItem("Sytytin");
-                    return "Kokki ottaa kolikkosi salaa ja sujauttaa sinulle sytyttimen.";
-                }
-                return "Kokki kuiskaa: 'Voin antaa sinulle jotain hyödyllistä viidellä kolikolla.'";
-            }},
-            { text: "Palaa käytävälle", move: "kaytava" }
-        ]
-    },
-    piha: {
-        title: "Ulkoilupiha",
-        text: "Korkeat piikkilanka-aidat ympäröivät pihaa. Muutama muu vanki treenaa nurkassa. Nurmikolla näkyy vanha ilmanvaihtokanavan ritilä.",
-        choices: [
-            { text: "Juttele Isolle Bobille nurkassa", action: () => {
-                if (state.inventory.includes("Sytytin")) {
-                    state.guardDistracted = true;
-                    return "Annat sytyttimen Bobille. Vastineeksi hän lupaa aloittaa tappelun käytävällä 5 minuutin kuluttua hämätäkseen vartijoita!";
-                }
-                return "Iso Bob sanoo: 'Etsin sytytintä. Tuo minulle sellainen, niin voin järjestää sinulle pienen hämäyksen käytävälle.'";
-            }},
-            { text: "Tutki ilmanvaihtoritilää", action: () => {
-                if (state.inventory.includes("Ruuvimeisseli")) {
-                    state.ventOpen = true;
-                    return "Avasit ritilän ruuvimeisselillä! Tästä mahtuu ryömimään sisään.";
-                }
-                return "Ritilä on tiukasti kiinni ruuveilla. Tarvitset jotain millä avata ne.";
-            }},
-            { text: "Ryömi ilmanvaihtokanavaan", condition: () => state.ventOpen, move: "ilmastointi" },
-            { text: "Palaa sisälle käytävälle", move: "kaytava" }
-        ]
-    },
-    huoltokaytava: {
-        title: "Salainen Huoltokäytävä",
-        text: "Pimeä ja pölyinen putkistoja täynnä oleva käytävä. Täältä näkee suoraan vartijoiden päämajan takahuoneeseen pienen raon kautta.",
-        choices: [
-            { text: "Kurkista raosta vartijakoppiin", action: () => {
-                if (!state.keycardStolen) {
-                    addItem("Avainkortti");
-                    state.keycardStolen = true;
-                    return "Yletät pitkällä tikulla/käpälällä raosta ja onnistut onkimaan pöydälle jätetyn Avainkortin!";
-                }
-                return "Koppi on tyhjä esineistä.";
-            }},
-            { text: "Palaa takaisin selliisi", move: "selli" }
-        ]
-    },
-    ilmastointi: {
-        title: "Ilmanvaihtokanavat",
-        text: "Ryömit ahtaassa metalliputkessa. Kanava haarautuu kahteen suuntaan. Oikealta kuuluu tuulettimen ääni, vasemmalta kuuluu hiljaisuutta.",
-        choices: [
-            { text: "Mene vasemmalle (kohti hiljaisuutta)", action: () => {
-                moveRoom("vapaus");
-                return "Ryömit putken päähän, potkaiset ulkoritilän irti ja tipahdat vankilan ulkopuolelle metsään!";
-            }},
-            { text: "Mene oikealle (kohti tuuletinta)", action: () => {
-                return "Tuulettimen suuret lavat pyörivät liian lujaa. Et pääse tästä suunnasta eteenpäin ilman että loukkaannut.";
-            }},
-            { text: "Palaa takaisin ulkoilupihalle", move: "piha" }
-        ]
-    },
-    vapaus: {
-        title: "VAPAUS!",
-        text: "Olet onnistunut! Hengität raikasta ulkoilmaa vankilan muurien ulkopuolella. Juokset kohti vapautta ja peli päättyy voittoosi!",
-        choices: [
-            { text: "Pelaa uudelleen", action: () => {
-                resetGame();
-                return "Peli aloitettu alusta.";
-            }}
-        ]
-    }
-};
-
-let currentRoom = "selli";
-
-function updateScreen(extraText = "") {
-    const room = rooms[currentRoom];
-    document.getElementById("location").innerText = room.title;
+function paivita(teksti, valinnat) {
+    document.getElementById("teksti").innerHTML = teksti;
+    document.getElementById("inv").innerText = reppu.length > 0 ? reppu.join(", ") : "Tyhjä";
     
-    // Päivitä tavaralista
-    if (state.inventory.length === 0) {
-        document.getElementById("inventory").innerText = "Tyhjä";
-    } else {
-        document.getElementById("inventory").innerText = state.inventory.join(", ");
+    let nappiAlue = document.getElementById("napit");
+    nappiAlue.innerHTML = "";
+    
+    valinnat.forEach(v => {
+        let b = document.createElement("button");
+        b.innerText = v.t;
+        b.onclick = v.f;
+        nappiAlue.appendChild(b);
+    });
+}
+
+function meneSelli() {
+    document.getElementById("loc").innerText = "Oma Selli";
+    let teksti = "Olet suljettuna selliin. Seinä on murenevaa tiiltä. Käytävästä kuuluu askeleita.";
+    let valinnat = [
+        { t: "Etsi sängyn alta", f: () => {
+            if(!reppu.includes("Ruuvimeisseli")) {
+                reppu.push("Ruuvimeisseli");
+                paivita("Löysit vanhan ruuvimeisselin!", [{t: "Jatka", f: meneSelli}]);
+            } else {
+                paivita("Sängyn alla on vain pölyä.", [{t: "Jatka", f: meneSelli}]);
+            }
+        }},
+        { t: "Kaiva takaseinää", f: () => {
+            if(reppu.includes("Ruuvimeisseli")) {
+                kaivettu += 25;
+                if(kaivettu >= 100) {
+                    paivita("Sait tehtyä seinään ison reiän!", [{t: "Mene reiästä sisään", f: meneSalakaytava}]);
+                } else {
+                    paivita(`Raaputat seinää. Se murenee vähän. (Edistyminen: ${kaivettu}%)`, [{t: "Jatka kaivamista", f: meneSelli}]);
+                }
+            } else {
+                paivita("Seinä on liian kova kynsille. Tarvitset työkalun.", [{t: "Palaa", f: meneSelli}]);
+            }
+        }},
+        { t: "Astu ulos käytävälle", f: meneKaytava }
+    ];
+    if(kaivettu >= 100) {
+        valinnat.push({ t: "Mene seinän reiästä salakäytävään", f: meneSalakaytava });
     }
+    paivita(teksti, valinnat);
+}
 
-    // Päivitä tarinateksti
-    let textHTML = room.text;
-    if (extraText) {
-        textHTML = `<strong>${extraText}</strong><br><br>` + textHTML;
+function meneKaytava() {
+    document.getElementById("loc").innerText = "Pääkäytävä";
+    let teksti = "Pitkä käytävä. Pohjoisessa häämöttää ulko-ovi ja vartijoiden koppi. Etelässä on piha, lännessä ruokala.";
+    paivita(teksti, [
+        { t: "Mene Ruokalaan", f: meneRuokala },
+        { t: "Mene Ulkoilupihalle", f: menePiha },
+        { t: "Yritä juosta ulko-ovesta karkuun", f: () => {
+            if(vartijaHamatty && reppu.includes("Avainkortti")) {
+                meneVoitto();
+            } else if(reppu.includes("Avainkortti")) {
+                paivita("Vartija näkee sinut ja ottaa kiinni! Tarvitset hämäyksen.", [{t: "Palaa käytävälle", f: meneKaytava}]);
+            } else {
+                paivita("Ovi on lukossa sähköisellä kortilla, ja vartija tuijottaa sinua.", [{t: "Palaa", f: meneKaytava}]);
+            }
+        }},
+        { t: "Palaa omaan selliin", f: meneSelli }
+    ]);
+}
+
+function meneRuokala() {
+    document.getElementById("loc").innerText = "Ruokala";
+    paivita("Ruokalassa on kova meteli. Lattialla lojuu kiiltävä kolikko.", [
+        { t: "Poimi kolikko", f: () => {
+            if(!reppu.includes("Kolikko")) {
+                reppu.push("Kolikko");
+                paivita("Poimit kolikon taskuun.", [{t: "Jatka", f: meneRuokala}]);
+            } else {
+                paivita("Lattia on tyhjä.", [{t: "Jatka", f: meneRuokala}]);
+            }
+        }},
+        { t: "Osta keittiöläiseltä sytytin", f: () => {
+            if(reppu.includes("Kolikko")) {
+                reppu = reppu.filter(t => t !== "Kolikko");
+                reppu.push("Sytytin");
+                paivita("Kokki otti kolikon ja antoi sinulle sytyttimen!", [{t: "Jatka", f: meneRuokala}]);
+            } else if(reppu.includes("Sytytin")) {
+                paivita("Sinulla on jo sytytin.", [{t: "Jatka", f: meneRuokala}]);
+            } else {
+                paivita("Kokki kuiskaa: 'Anna kolikko, niin saat sytyttimen.'", [{t: "Palaa", f: meneRuokala}]);
+            }
+        }},
+        { t: "Palaa käytävälle", f: meneKaytava }
+    ]);
+}
+
+function menePiha() {
+    document.getElementById("loc").innerText = "Ulkoilupiha";
+    let teksti = "Ilma on kylmä. Kulmassa seisoo Iso Bob. Maassa näkyy ilmanvaihtoritilä.";
+    let valinnat = [
+        { t: "Puhu Isolle Bobille", f: () => {
+            if(reppu.includes("Sytytin")) {
+                reppu = reppu.filter(t => t !== "Sytytin");
+                vartijaHamatty = true;
+                paivita("Annoit sytyttimen Bobille! Hän lupaa aloittaa tappelun käytävällä hämätäkseen vartijaa.", [{t: "Mahtavaa", f: menePiha}]);
+            } else if(vartijaHamatty) {
+                paivita("Bob valmistautuu tappeluun käytävällä.", [{t: "Jatka", f: menePiha}]);
+            } else {
+                paivita("Bob sanoo: 'Etsin sytytintä. Hanki minulle sellainen, niin hämään vartijoita.'", [{t: "Selvä", f: menePiha}]);
+            }
+        }},
+        { t: "Tutki ilmanvaihtoritilää", f: () => {
+            if(reppu.includes("Ruuvimeisseli")) {
+                ilmastointiAuki = true;
+                paivita("Avasit ritilän ruuvimeisselillä! Täältä pääsee putkeen.", [{t: "Jatka", f: menePiha}]);
+            } else {
+                paivita("Ritilä on tiukasti kiinni ruuveilla. Tarvitset työkalun.", [{t: "Palaa", f: menePiha}]);
+            }
+        }},
+        { t: "Palaa takaisin käytävälle", f: meneKaytava }
+    ];
+    if(ilmastointiAuki) {
+        valinnat.push({ t: "Ryömi ilmanvaihtoputkeen", f: meneIlmastointi });
     }
-    document.getElementById("story-text").innerHTML = textHTML;
+    paivita(teksti, valinnat);
+}
 
-    // Päivitä valinnat/napit
-    const choicesDiv = document.getElementById("choices");
-    choicesDiv.innerHTML = "";
-room.choices.forEach(choice => {// Tarkistetaan ehto jos sellainen on (esim. onko seinä rikki)if (choice.condition && !choice.condition()) {return;}const btn = document.createElement("button");btn.innerText = choice.text;btn.onclick = () => {if (choice.move) {moveRoom(choice.move);} else if (choice.action) {const result = choice.action();updateScreen(result);}};choicesDiv.appendChild(btn);});}function moveRoom(roomKey) {currentRoom = roomKey;updateScreen();}function addItem(item) {if (!state.inventory.includes(item)) {state.inventory.push(item);}}function resetGame() {state = {inventory: [],guardDistracted: false,ventOpen: false,keycardStolen: false,digProgress: 0,wallWeakened: false,money: 0};currentRoom = "selli";updateScreen();}// Aloita peliwindow.onload = () => {updateScreen();};
+function meneSalakaytava() {
+    document.getElementById("loc").innerText = "Huoltokäytävä";
+    paivita("Olet seinän sisällä huoltokäytävässä. Pienen raon kautta näet vartijan pöydän, jossa lojuu avainkortti.", [
+        { t: "Ongi avainkortti raosta ruuvimeisselillä", f: () => {
+            if(!reppu.includes("Avainkortti")) {
+                reppu.push("Avainkortti");
+                paivita("Onnistuit! Kortti on nyt sinulla.", [{t: "Hienoa", f: meneSalakaytava}]);
+            } else {
+                paivita("Pöytä on tyhjä.", [{t: "Palaa", f: meneSalakaytava}]);
+            }
+        }},
+        { t: "Palaa takaisin selliin", f: meneSelli }
+    ]);
+}
 
+function meneIlmastointi() {
+    document.getElementById("loc").innerText = "Ilmanvaihtoputki";
+    paivita("Putki haarautuu kahteen suuntaan. Oikealta kuuluu vaarallisen kova tuulettimen ääni. Vasemmalta näkyy valoa.", [
+        { t: "Mene vasemmalle kohti valoa", f: meneVoitto },
+        { t: "Mene oikealle tuuletinta kohti", f: () => {
+            paivita("Tuuletin pyörii liian lujaa, et pääse tästä ohi.", [{t: "Palaa", f: meneIlmastointi}]);
+        }},
+        { t: "Peruuta takaisin pihalle", f: menePiha }
+    ]);
+}
+
+function meneVoitto() {
+    document.getElementById("loc").innerText = "VAPAUS!";
+    paivita("ONNEKSI OLKOON! Pääsit vankilasta vapauteen ja voitit pelin!", [
+        { t: "Pelaa uudelleen", f: () => {
+            reppu = []; kaivettu = 0; vartijaHamatty = false; ilmastointiAuki = false; meneSelli();
+        }}
+    ]);
+}
+
+// Käynnistä peli
+meneSelli();
+</script>
+
+</body>
+</html>
