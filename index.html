@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="fi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kiven sisässä - Vankilapeli</title>
+    <style>
+        body {
+            font-family: 'Courier New', Courier, monospace;
+            background-color: #121212;
+            color: #e0e0e0;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+        }
+        #game-container {
+            max-width: 600px;
+            width: 100%;
+            background-color: #1e1e1e;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+            border: 1px solid #333;
+        }
+        h1 {
+            text-align: center;
+            color: #ff4444;
+            margin-top: 0;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 10px;
+            background-color: #2a2a2a;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+            border-left: 4px solid #ff4444;
+        }
+        .stat-item {
+            font-size: 14px;
+        }
+        #log {
+            height: 200px;
+            overflow-y: auto;
+            background-color: #111;
+            padding: 10px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+            border: 1px solid #444;
+            font-size: 14px;
+            line-height: 1.4;
+        }
+        .buttons {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        button {
+            background-color: #333;
+            color: #fff;
+            border: 1px solid #555;
+            padding: 12px;
+            font-size: 14px;
+            cursor: pointer;
+            border-radius: 4px;
+            text-align: left;
+            transition: background 0.2s;
+        }
+        button:hover {
+            background-color: #444;
+            border-color: #ff4444;
+        }
+        button:disabled {
+            background-color: #222;
+            color: #555;
+            border-color: #333;
+            cursor: not-allowed;
+        }
+        .danger {
+            color: #ff4444;
+        }
+        .success {
+            color: #44ff44;
+        }
+    </style>
+</head>
+<body>
+
+<div id="game-container">
+    <h1>Kiven Sisässä</h1>
+    
+    <div class="stats-grid">
+        <div class="stat-item"><strong>Päivä:</strong> <span id="stat-day">1</span></div>
+        <div class="stat-item"><strong>Aika:</strong> <span id="stat-time">Aamu</span></div>
+        <div class="stat-item"><strong>Terveys:</strong> <span id="stat-hp">100</span>/100</div>
+        <div class="stat-item"><strong>Varallisuus:</strong> <span id="stat-money">10</span> €</div>
+        <div class="stat-item"><strong>Maine:</strong> <span id="stat-rep">0</span> (Keltanokka)</div>
+        <div class="stat-item"><strong>Pako-valmius:</strong> <span id="stat-escape">0</span>%</div>
+    </div>
+
+    <div id="log">Sinut on tuomittu Sukevan vankilaan. Sellin ovi kolahtaa kiinni. Tästä alkaa uusi arkesi.</div>
+
+    <div class="buttons">
+        <button id="btn-1" onclick="chooseOption(1)"></button>
+        <button id="btn-2" onclick="chooseOption(2)"></button>
+        <button id="btn-3" onclick="chooseOption(3)"></button>
+        <button id="btn-4" onclick="chooseOption(4)"></button>
+    </div>
+</div>
+
+<script>
+    // Pelin tila (State)
+    let player = {
+        day: 1,
+        timeStep: 0, // 0: Aamu, 1: Päivä, 2: Ilta, 3: Yö
+        hp: 100,
+        money: 10,
+        rep: 0,
+        escapeProgress: 0,
+        hasScrewdriver: false
+    };
+
+    const times = ["Aamu", "Päivä", "Ilta", "Yö"];
+
+    // Päivittää käyttöliittymän tekstien ja arvojen osalta
+    function updateUI() {
+        document.getElementById("stat-day").innerText = player.day;
+        document.getElementById("stat-time").innerText = times[player.timeStep];
+        document.getElementById("stat-hp").innerText = player.hp;
+        document.getElementById("stat-money").innerText = player.money;
+        document.getElementById("stat-escape").innerText = player.escapeProgress;
+
+        // Maine-nimikkeen päivitys
+        let repTitle = "Keltanokka";
+        if (player.rep >= 20) repTitle = "Kokenut";
+        if (player.rep >= 50) repTitle = "Kivenkova";
+        if (player.rep >= 80) repTitle = "Liskojen kuningas";
+        document.getElementById("stat-rep").innerText = `${player.rep} (${repTitle})`;
+
+        // Tarkistetaan pelin loppumisehdot
+        if (player.hp <= 0) {
+            logMessage("<span class='danger'>Menehdyit vammoihisi vankilan sairaalassa. Peli päättyi.</span>");
+            disableAllButtons();
+            return;
+        }
+        if (player.escapeProgress >= 100) {
+            logMessage("<span class='success'>Onnistuit! Sahasit kalterit, vältit vartijat ja juoksit vapauteen. Voitit pelin!</span>");
+            disableAllButtons();
+            return;
+        }
+
+        // Haetaan valinnat nykyisen vuorokaudenajan mukaan
+        setupOptions();
+    }
+
+    function logMessage(text) {
+        const log = document.getElementById("log");
+        log.innerHTML += "<br><br>" + text;
+        log.scrollTop = log.scrollHeight; // Automaattinen rullaus alas
+    }
+
+    function disableAllButtons() {
+        for (let i = 1; i <= 4; i++) {
+            document.getElementById(`btn-${i}`).style.display = "none";
+        }
+    }
+
+    // Määritetään toiminnot vuorokaudenajan perusteella
+    function setupOptions() {
+        const b1 = document.getElementById("btn-1");
+        const b2 = document.getElementById("btn-2");
+        const b3 = document.getElementById("btn-3");
+        const b4 = document.getElementById("btn-4");
+
+        // Kaikki näkyviin oletuksena
+        b1.style.display = "block";
+        b2.style.display = "block";
+        b3.style.display = "block";
+        b4.style.display = "block";
+
+        if (player.timeStep === 0) { // AAMU
+            b1.innerText = "1. Mene aamupalalle ruokalaan (Terveys +10)";
+            b2.innerText = "2. Treenaa sellissä (Maine +5, Terveys -5)";
+            b3.innerText = "3. Etsi salakauppias pihalta";
+            b4.innerText = "4. Lepää ja kerää voimia";
+        } else if (player.timeStep === 1) { // PÄIVÄ
+            b1.innerText = "1. Mene vankilan verstaalle töihin (+15 €)";
+            b2.innerText = "2. Haasta riitaa toisen vangin kanssa (Maine +15, vaatii terveyttä)";
+            b3.innerText = "3. Tutki vankilan poistumisreittejä (Pako +10)";
+            b4.innerText = "4. Istu hiljaa sellissä";
+        } else if (player.timeStep === 2) { // ILTA
+            b1.innerText = "1. Osta salakauppiaalta ruuvimeisseli (Maksaa 30 €)";
+            b2.innerText = "2. Pelaa korttia rahasta (50% mahdollisuus voittaa/hävitä 10 €)";
+            b3.innerText = "3. Tee palvelus jengin pomolle (Maine +10)";
+            b4.innerText = "4. Valmistaudu yöhön";
+        } else if (player.timeStep === 3) { // YÖ
+            b1.innerText = "1. Nuku rauhallisesti (Terveys +20)";
+            if (player.hasScrewdriver) {
+                b2.innerText = "2. Ruuvaa ilmanvaihtokanavan kalteria auki (Pako +20)";
+            } else {
+                b2.innerText = "2. Yritä tiirikoitua ovea lusikalla (Pako +5, riski jäädä kiinni)";
+            }
+            b3.style.display = "none";
+            b4.style.display = "none";
+        }
+    }
+
+    // Pelaajan tekemät valinnat
+    function chooseOption(num) {
+        let currentStep = player.timeStep;
+
+        if (currentStep === 0) { // AAMU-VALINNAT
+            if (num === 1) {
+                player.hp = Math.min(100, player.hp + 10);
+                logMessage("Söit kaurapuuroa ruokalassa. Olo on hieman parempi.");
+            } else if (num === 2) {
+                player.rep += 5;
+                player.hp -= 5;
+                logMessage("Teit punpunnuksia sellin lattialla. Muut vangit katsoivat kunnioittaen.");
+            } else if (num === 3) {
+                logMessage("Pihalla hämärä hahmo kuiskasi: 'Tule käymään ilta-aikaan, jos tarvitset työkaluja.'");
+            } else if (num === 4) {
+                logMessage("Makasit sängyllä tuijottaen kattoa.");
+            }
+        } 
+        else if (currentStep === 1) { // PÄIVÄ-VALINNAT
+            if (num === 1) {
+                player.money += 15;
+                logMessage("Kasaat rekisterikilpiä verstaalla. Tienasit 15 €.");
+            } else if (num === 2) {
+                if (player.hp > 30) {
+                    let win = Math.random() > 0.4;
+                    if (win) {
+                        player.rep += 15;
+                        player.hp -= 15;
+                        logMessage("<span class='success'>Voitit tappelun ulkoilupihalla! Maineesi kasvoi kohisten.</span>");
+                    } else {
+                        player.rep += 5;
+                        player.hp -= 30;
+                        logMessage("<span class='danger'>Sait pahasti turpaasi, mutta näytit ettet pelkää. Keho on mustelmilla.</span>");
+                    }
+                } else {
+                    logMessage("Olet liian heikossa kunnossa tappelun aloittamiseen!");
+                    return; // Ei kuluta vuoroa
+                }
+            } else if (num === 3) {
+                player.escapeProgress += 10;
+                logMessage("Tarkkailit vartijoiden vuorojen vaihtumista ja piirsit karttaa.");
+            } else if (num === 4) {
+                logMessage("Päivä kului hitaasti sellin nurkassa.");
+            }
+        } 
+        else if (currentStep === 2) { // ILTA-VALINNAT
+            if (num === 1) {
+                if (player.money >= 30) {
+                    player.money -= 30;
+                    player.hasScrewdriver = true;
