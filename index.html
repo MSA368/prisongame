@@ -248,4 +248,5 @@ function updateScreen(extraText = "") {
     // Päivitä valinnat/napit
     const choicesDiv = document.getElementById("choices");
     choicesDiv.innerHTML = "";
+room.choices.forEach(choice => {// Tarkistetaan ehto jos sellainen on (esim. onko seinä rikki)if (choice.condition && !choice.condition()) {return;}const btn = document.createElement("button");btn.innerText = choice.text;btn.onclick = () => {if (choice.move) {moveRoom(choice.move);} else if (choice.action) {const result = choice.action();updateScreen(result);}};choicesDiv.appendChild(btn);});}function moveRoom(roomKey) {currentRoom = roomKey;updateScreen();}function addItem(item) {if (!state.inventory.includes(item)) {state.inventory.push(item);}}function resetGame() {state = {inventory: [],guardDistracted: false,ventOpen: false,keycardStolen: false,digProgress: 0,wallWeakened: false,money: 0};currentRoom = "selli";updateScreen();}// Aloita peliwindow.onload = () => {updateScreen();};
 
